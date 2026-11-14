@@ -1,0 +1,7 @@
+/config.php
+/install.token
+/storage/
+/backup/
+*.ps1
+*.sql.gz
+*.sql.gpg
