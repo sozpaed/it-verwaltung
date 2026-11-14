@@ -2,9 +2,11 @@
 
 declare(strict_types=1);
 
+require_once __DIR__ . '/inventory-settings.php';
+
 function field(array $input, string $key, int $max, bool $required = true): string
 {
-    $value = $input[$key] ?? null;
+    $value = array_key_exists($key, $input) ? $input[$key] : ($required ? null : '');
     if (!is_string($value) || preg_match('//u', $value) !== 1) {
         throw new InvalidArgumentException('Ungültiger Wert für ' . $key . '.');
     }
@@ -30,14 +32,32 @@ function dateField(array $input, string $key, bool $required = true): ?string
 
 function deviceValues(array $input): array
 {
+    $price = field($input, 'Kaufpreis', 13, false);
+    if ($price !== '' && !preg_match('/\A[0-9]{1,10}(?:[.,][0-9]{1,2})?\z/', $price)) {
+        throw new InvalidArgumentException('Der Kaufpreis muss eine nicht negative Zahl mit höchstens zwei Nachkommastellen sein.');
+    }
+
     return [
         'inventory_number' => field($input, 'Inventarnummer', 100),
-        'category' => field($input, 'Geräteart', 100),
-        'model' => field($input, 'Modell', 150),
+        'designation' => field($input, 'Bezeichnung', 150, false),
+        'product_name' => field($input, 'Produktname', 150, false),
+        'category' => field($input, 'Kategorie', 100, false),
+        'inventory_area_id' => settingId($input['inventory_area_id'] ?? null),
+        'inventory_group_id' => settingId($input['inventory_group_id'] ?? null),
+        'inventory_category_id' => settingId($input['inventory_category_id'] ?? null),
         'serial_number' => field($input, 'Seriennummer', 150, false),
-        'location' => field($input, 'Standort', 150),
-        'device_condition' => field($input, 'Zustand', 100),
-        'notes' => field($input, 'Notizen', 2000, false),
+        'model' => field($input, 'Modell', 150, false),
+        'manufacturer' => field($input, 'Hersteller', 150, false),
+        'location' => field($input, 'Standort', 150, false),
+        'purchase_date' => dateField($input, 'Kaufdatum', false),
+        'purchase_price' => $price === '' ? null : str_replace(',', '.', $price),
+        'graphics_card' => field($input, 'Grafikkarte', 150, false),
+        'processor' => field($input, 'Prozessor', 150, false),
+        'storage_capacity' => field($input, 'Speicher', 150, false),
+        'ram' => field($input, 'RAM', 150, false),
+        'operating_system' => field($input, 'OS', 150, false),
+        'notes' => field($input, 'Bemerkung', 2000, false),
+        'device_condition' => field($input, 'Zustand', 100, false),
     ];
 }
 
@@ -45,15 +65,71 @@ function saveDevice(PDO $database, array $input, ?int $id): void
 {
     $values = deviceValues($input);
     if ($id === null) {
-        $sql = 'INSERT INTO devices (inventory_number, category, model, serial_number, location, device_condition, notes)
-                VALUES (:inventory_number, :category, :model, :serial_number, :location, :device_condition, :notes)';
+        $sql = 'INSERT INTO devices
+                (inventory_number, designation, product_name, category, inventory_area_id, inventory_group_id, inventory_category_id,
+                 serial_number, model, manufacturer, location,
+                 purchase_date, purchase_price, graphics_card, processor, storage_capacity, ram, operating_system, notes, device_condition)
+                VALUES (:inventory_number, :designation, :product_name, :category, :inventory_area_id, :inventory_group_id, :inventory_category_id,
+                        :serial_number, :model, :manufacturer, :location,
+                        :purchase_date, :purchase_price, :graphics_card, :processor, :storage_capacity, :ram, :operating_system, :notes, :device_condition)';
     } else {
-        $sql = 'UPDATE devices SET inventory_number = :inventory_number, category = :category, model = :model,
-                serial_number = :serial_number, location = :location, device_condition = :device_condition, notes = :notes
+        $sql = 'UPDATE devices SET inventory_number = :inventory_number, designation = :designation, product_name = :product_name,
+                category = :category, serial_number = :serial_number, model = :model, manufacturer = :manufacturer, location = :location,
+                inventory_area_id = :inventory_area_id, inventory_group_id = :inventory_group_id, inventory_category_id = :inventory_category_id,
+                purchase_date = :purchase_date, purchase_price = :purchase_price, graphics_card = :graphics_card, processor = :processor,
+                storage_capacity = :storage_capacity, ram = :ram, operating_system = :operating_system, notes = :notes,
+                device_condition = :device_condition
                 WHERE id = :id';
         $values['id'] = $id;
     }
     $database->prepare($sql)->execute($values);
+}
+
+function saveDeviceWithGeneratedNumber(PDO $database, array $input): string
+{
+    $area = inventorySetting($database, 'area', settingId($input['inventory_area_id'] ?? null, true));
+    $category = inventorySetting($database, 'category', settingId($input['inventory_category_id'] ?? null, true));
+    $type = inventorySetting($database, 'type', settingId($category['type_id'], true));
+    $prefix = $area['code'];
+    $batch = field($input, 'Charge', 3, false);
+    if ($batch !== '' && !preg_match('/\A[1-9][0-9]{0,2}\z/', $batch)) {
+        throw new InvalidArgumentException('Die Charge muss eine positive Zahl ohne führende Null sein.');
+    }
+    $base = $prefix . $batch;
+    $reference = strtoupper(field($input, 'Arbeitsplatz', 100, false));
+    $positions = range(1, 99);
+    if ($reference !== '') {
+        if ($type['code'] === 'PC' || !preg_match('/\A' . preg_quote($base, '/') . 'PC([0-9]{2})\z/', $reference, $matches)
+            || $matches[1] === '00') {
+            throw new InvalidArgumentException('Bitte einen vorhandenen PC desselben Bereichs oder Raums und derselben Charge mit einer Nummer von 01 bis 99 angeben.');
+        }
+        $check = $database->prepare('SELECT id FROM devices WHERE inventory_number = ?');
+        $check->execute([$reference]);
+        if ($check->fetchColumn() === false) {
+            throw new InvalidArgumentException('Der ausgewählte Arbeitsplatz wurde nicht gefunden.');
+        }
+        $positions = [(int) $matches[1]];
+    }
+
+    foreach ($positions as $position) {
+        $number = $base . $type['code'] . sprintf('%02d', $position);
+        $check = $database->prepare('SELECT id FROM devices WHERE inventory_number = ?');
+        $check->execute([$number]);
+        if ($check->fetchColumn() !== false) {
+            continue;
+        }
+        try {
+            saveDevice($database, array_replace($input, ['Inventarnummer' => $number]), null);
+            return $number;
+        } catch (PDOException $exception) {
+            if (($exception->errorInfo[1] ?? null) !== 1062) {
+                throw $exception;
+            }
+        }
+    }
+    throw new InvalidArgumentException($reference !== ''
+        ? 'Für diesen Arbeitsplatz ist bereits ein Gerät dieses Typs vorhanden.'
+        : 'Für diesen Bereich oder Raum, die Charge und den Gerätetyp sind alle Nummern von 01 bis 99 vergeben.');
 }
 
 function createHandover(PDO $database, int $deviceId, array $input): void

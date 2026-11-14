@@ -10,9 +10,43 @@ oder den Einsatz mit echten personenbezogenen Daten freigegeben.
   Bereiche. Die Geräteübersicht ist eine eigene Seite. Eine spätere
   Personalisierung und Ticketnachrichten sind vorgesehen, aber noch nicht
   implementiert.
-- Geräte mit Inventarnummer, Art, Modell, Seriennummer, Standort und Zustand
-  anlegen und bearbeiten. Der Standort ist der hinterlegte feste Standort und
-  wird durch eine Ausgabe nicht automatisch geändert.
+- Geräte mit Inventarnummer und den Feldern zusätzliche Bezeichnung, Produktname,
+  Kategorie, Seriennummer, Modell, Hersteller, Standort, Kaufdatum, Kaufpreis,
+  Grafikkarte, Prozessor, Speicher, RAM, OS und Bemerkung anlegen und bearbeiten.
+  Der bisherige Zustand bleibt zusätzlich erhalten. Bei manueller Vergabe ist
+  nur die Inventarnummer Pflicht; Speicher und RAM sind getrennte Freitextfelder. Der Kaufpreis wird
+  inklusive Mehrwertsteuer ohne Währungsangabe mit bis zu zwei Nachkommastellen gespeichert. Der Standort
+  ist der hinterlegte feste Standort und wird durch eine Ausgabe nicht automatisch
+  geändert. Ein Excel-Import ist noch nicht implementiert.
+- Bereich, Typ, Gruppe und Kategorie werden in den Inventareinstellungen
+  verwaltet und beim Gerät ausgewählt. Jede Kategorie ist einem Typ zugeordnet;
+  dessen Auswahl wird anhand der Kategorie angezeigt. Die Gruppe dient der
+  Zuordnung und beeinflusst die Inventarnummer nicht. Standardtypen und
+  -kategorien sind bereits angelegt, Bereiche und Gruppen werden selbst
+  ergänzt. Nicht mehr benötigte Einträge können nur gelöscht werden, wenn sie
+  nicht verwendet werden.
+- Die Inventarnummer entspricht der eindeutigen Bezeichnung aus der
+  Inventarisierung. Beim Anlegen kann sie manuell eingegeben oder automatisch
+  aus dem Kürzel des ausgewählten Bereichs bzw. Raums, optionaler Charge,
+  Typkürzel und laufender Nummer erzeugt werden, zum Beispiel `LNB1PC01` oder
+  `E01PC01`. Bei automatischer Vergabe sind Bereich und Kategorie erforderlich;
+  bei manueller Vergabe bleibt die Inventarnummer das einzige Pflichtfeld.
+  Bereichskürzel bestehen aus 2 bis 12 Buchstaben oder Ziffern, Typkürzel aus
+  zwei Buchstaben und die optionale Charge aus einer positiven Zahl mit
+  höchstens drei Ziffern.
+  Die laufende Nummer wird je Kombination aus Bereich/Raum, Charge und Typ von
+  01 bis 99 vergeben. 00 wird nicht automatisch vergeben. Für Zubehör lässt
+  sich ein vorhandener PC desselben Bereichs bzw. Raums und derselben Charge
+  auswählen; seine Positionsnummer wird übernommen. Ist diese Nummer für den
+  Zubehörtyp schon vergeben, wird das Speichern abgewiesen. Die Inventarnummer
+  bleibt beim Bearbeiten eines Standorts unverändert.
+  Typkürzel: PC (Laptop, Rechner, iMac), TB (iPad/Tablet), BE (Beamer),
+  DK (Dokumentenkamera), MO (Monitor), KB (Tastatur), MA (Maus), TV (Fernseher).
+  iMacs verwenden wie andere PCs das Raumkürzel und werden über ihre Kategorie
+  als iMac erfasst. Bestehende abweichende Nummern können weiterhin manuell
+  erfasst werden. Bisherige Freitextkategorien bleiben bei vorhandenen Geräten
+  erhalten, bis sie ausdrücklich geändert werden. Änderungen an Einstellungen
+  oder Standorten ändern bestehende Inventarnummern nicht.
 - Ausleihe mit optionaler Rückgabefrist oder dauerhafte Überlassung an eine
   bestehende Schülerinnenkennung und Klasse erfassen. Eine offene Ausgabe pro
   Gerät; Rücknahme mit Datum und Zustand, einschließlich Verlauf.
@@ -20,9 +54,12 @@ oder den Einsatz mit echten personenbezogenen Daten freigegeben.
   mit zusätzlichem Ausgaberecht können Schülerinnenkennungen und den Verlauf
   sehen sowie Ausgaben und Rücknahmen erfassen.
 - Administratorkonten können im Browser weitere Konten anlegen und dabei
-  Administrator- und Ausgaberecht separat vergeben. Ein Administratorkonto hat
+  Administrator-, Ausgabe- und Inventareinstellungsrecht separat vergeben.
+  Das Inventareinstellungsrecht kann auch bei bestehenden Konten angepasst
+  werden; Administratorkonten haben unabhängig davon Zugang. Ein Administratorkonto hat
   nicht automatisch Ausgaberecht, kann aber Konten mit diesem Recht anlegen.
-  Bestehende Konten können noch nicht im Browser geändert oder gelöscht werden.
+  Andere Kontoeigenschaften können noch nicht im Browser geändert und Konten
+  noch nicht gelöscht werden.
 - Über das Profilmenü oben rechts können angemeldete Benutzer ihr Passwort
   unter Angabe des bisherigen Passworts ändern oder sich abmelden. Nach einer
   Passwortänderung werden andere Sitzungen beim nächsten Aufruf abgemeldet.
@@ -39,7 +76,7 @@ Datenschutz, Berechtigungen und Datensicherung gesondert zu prüfen.
 
 ## Voraussetzungen und Einrichtung
 
-Benötigt werden PHP 8.3 mit `pdo_mysql` und eine lokale MySQL-8.4-Datenbank.
+Benötigt werden PHP 8.3 mit `pdo_mysql`, ein Browser mit JavaScript und eine lokale MySQL-8.4-Datenbank.
 Der Prototyp ist ausdrücklich auf `127.0.0.1:3307`, Datenbank `itdoku_dev`
 und den eingeschränkten Benutzer `itdoku_app` festgelegt. Diese Festlegung
 verhindert eine versehentliche Verbindung zur Schulverwaltungsdatenbank.
@@ -83,6 +120,32 @@ werden. Alternativ ist weiterhin die manuelle Einrichtung über
 
 ### Bestehende Entwicklungsdatenbank aktualisieren
 
+Für Inventareinstellungen und das zugehörige separate Recht vorab die Daten
+sichern und die folgenden additiven Migrationen ausführen:
+
+```powershell
+php bin\migrate-inventory-settings-permission.php
+php bin\migrate-inventory-settings.php
+```
+
+Bestehende Konten, Rechte und Geräte bleiben erhalten. Die Migrationen sind
+wiederholbar; bei einem unvollständigen Schema nach einem Fehler den Zustand
+vor einem erneuten Versuch prüfen. Bei Neuinstallationen sind die Strukturen
+bereits enthalten. Der Zugriff auf die Inventareinstellungen ist für
+Administratoren oder Konten mit dem entsprechenden separaten Recht möglich.
+
+Vor der Bereitstellung der erweiterten Gerätefelder bestehende Daten sichern
+und die additive Migration einmalig ausführen:
+
+```powershell
+php bin\migrate-device-fields.php
+```
+
+Bestehende Geräte bleiben erhalten; neue Felder sind zunächst leer. Bei einer
+neuen Installation sind sie bereits im Schema enthalten. MySQL führt die
+Schemaänderung unmittelbar aus. Wenn nur einige neue Spalten gefunden werden,
+bricht das Skript ab; in diesem Fall den Datenbankzustand prüfen.
+
 Bei einer bereits initialisierten Datenbank vor der Nutzung der
 Benutzerverwaltung die Daten sichern und einmalig ausführen:
 
@@ -98,8 +161,9 @@ die Schemaänderung unmittelbar aus; nach einem Fehler den Zustand prüfen.
 
 Das Administratorkonto darf weitere Konten unter **Benutzerkonten** anlegen,
 erhält aber nicht automatisch Ausgaberecht. Es kann ein weiteres Konto mit
-diesem Recht anlegen. Bestehende Konten können noch nicht im Browser bearbeitet
-werden. Benutzernamen dürfen Buchstaben, Ziffern, Punkt, Unterstrich und
+diesem Recht anlegen. Bei bestehenden Konten kann das Recht für die
+Inventareinstellungen geändert werden; weitere Kontoeigenschaften noch nicht.
+Benutzernamen dürfen Buchstaben, Ziffern, Punkt, Unterstrich und
 Bindestrich enthalten. Passwörter benötigen 12 bis 72 Bytes. Zugangsdaten nicht
 ins Repository oder in den Chat schreiben.
 

@@ -12,6 +12,17 @@ function expectUser(bool $condition, string $message): void
     }
 }
 
+function expectUserException(string $class, callable $action): void
+{
+    try {
+        $action();
+    } catch (Throwable $exception) {
+        expectUser(get_class($exception) === $class, 'Unerwarteter Ausnahmetyp: ' . get_class($exception));
+        return;
+    }
+    throw new RuntimeException('Die erwartete Ausnahme ist ausgeblieben.');
+}
+
 $db = database();
 $name = 'test-' . bin2hex(random_bytes(12));
 $password = 'test-' . bin2hex(random_bytes(12));
@@ -38,6 +49,65 @@ try {
         expectUser($exception->getCode() === '23000', 'Unerwarteter Datenbankfehler.');
     }
     $id = (int) $user['id'];
+    expectUser(canManageInventorySettings(['can_manage_users' => 1]), 'Administratoren fehlt der Einstellungszugriff.');
+    expectUser(canManageInventorySettings(['can_manage_inventory_settings' => 1]), 'Das separate Recht wird nicht erkannt.');
+    expectUser(!canManageInventorySettings(['can_manage_users' => '0', 'can_manage_inventory_settings' => '0']),
+        'Unberechtigter Einstellungszugriff.');
+    foreach ([[0, $id, true], [$id, -1, true], [(string) $id, $id, true], [$id, $id, 1]] as [$actorId, $userId, $allowed]) {
+        expectUserException(InvalidArgumentException::class, fn() => setInventorySettingsPermission($db, $actorId, $userId, $allowed));
+    }
+    $columnCheck = $db->prepare(
+        'SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = ? AND column_name = ?'
+    );
+    $columnCheck->execute(['app_users', 'can_manage_inventory_settings']);
+    if ((int) $columnCheck->fetchColumn() === 1) {
+        $otherName = 'test-' . bin2hex(random_bytes(12));
+        $disabledName = 'test-' . bin2hex(random_bytes(12));
+        createUser($db, $otherName, $password, false, true, true);
+        createUser($db, $disabledName, $password, true, false);
+        $permissions = $db->prepare(
+            'SELECT id, password_hash, can_manage_users, can_manage_handover, can_manage_inventory_settings, active
+             FROM app_users WHERE username = ?'
+        );
+        $permissions->execute([$name]);
+        $admin = $permissions->fetch();
+        $permissions->execute([$otherName]);
+        $other = $permissions->fetch();
+        $permissions->execute([$disabledName]);
+        $disabled = $permissions->fetch();
+        expectUser(!(bool) $admin['can_manage_inventory_settings'] && (bool) $other['can_manage_inventory_settings'],
+            'Das Recht wird beim Anlegen nicht korrekt gesetzt.');
+        $otherId = (int) $other['id'];
+        $disabledId = (int) $disabled['id'];
+        $db->prepare('UPDATE app_users SET active = 0 WHERE id = ?')->execute([$disabledId]);
+        expectUserException(RuntimeException::class, fn() => setInventorySettingsPermission($db, $otherId, $id, true));
+        expectUserException(RuntimeException::class, fn() => setInventorySettingsPermission($db, $disabledId, $otherId, false));
+        $missingId = PHP_INT_MAX;
+        $missing = $db->prepare('SELECT 1 FROM app_users WHERE id = ?');
+        $missing->execute([$missingId]);
+        expectUser(!$missing->fetchColumn(), 'Die gewählte ID für den Negativtest ist bereits vergeben.');
+        expectUserException(InvalidArgumentException::class, fn() => setInventorySettingsPermission($db, $id, $missingId, true));
+        setInventorySettingsPermission($db, $id, $otherId, false);
+        setInventorySettingsPermission($db, $id, $otherId, false);
+        $permissions->execute([$otherName]);
+        $revoked = $permissions->fetch();
+        expectUser(!(bool) $revoked['can_manage_inventory_settings'], 'Das Recht wurde nicht entzogen.');
+        foreach (['password_hash', 'can_manage_users', 'can_manage_handover', 'active'] as $field) {
+            expectUser($revoked[$field] === $other[$field], 'Ein anderes Kontofeld wurde verändert: ' . $field);
+        }
+        setInventorySettingsPermission($db, $id, $otherId, true);
+        $permissions->execute([$otherName]);
+        $granted = $permissions->fetch();
+        expectUser((bool) $granted['can_manage_inventory_settings'], 'Das Recht wurde nicht vergeben.');
+        foreach (['password_hash', 'can_manage_users', 'can_manage_handover', 'active'] as $field) {
+            expectUser($granted[$field] === $other[$field], 'Ein anderes Kontofeld wurde verändert: ' . $field);
+        }
+        $permissions->execute([$name]);
+        expectUser(!(bool) $permissions->fetch()['can_manage_inventory_settings'], 'Unberechtigte Änderung wurde ausgeführt.');
+        echo "Inventareinstellungs-Berechtigungen erfolgreich getestet.\n";
+    } else {
+        echo "Inventareinstellungs-Datenbanktests übersprungen: Spalte noch nicht vorhanden.\n";
+    }
     $newPassword = 'new-' . bin2hex(random_bytes(12));
     foreach ([
         ['incorrect-password', $newPassword, $newPassword],

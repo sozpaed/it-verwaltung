@@ -22,18 +22,63 @@ function passwordVersionMatches(string $passwordHash, mixed $sessionVersion): bo
     return is_string($sessionVersion) && hash_equals(hash('sha256', $passwordHash), $sessionVersion);
 }
 
-function createUser(PDO $database, mixed $username, mixed $password, bool $canManageUsers, bool $canManageHandover): void
+function createUser(PDO $database, mixed $username, mixed $password, bool $canManageUsers, bool $canManageHandover, bool $canManageInventorySettings = false): void
 {
     validateUserCredentials($username, $password);
-    $statement = $database->prepare(
-        'INSERT INTO app_users (username, password_hash, can_manage_users, can_manage_handover) VALUES (?, ?, ?, ?)'
-    );
-    $statement->execute([
+    $values = [
         $username,
         password_hash($password, PASSWORD_DEFAULT),
         $canManageUsers ? 1 : 0,
         $canManageHandover ? 1 : 0,
-    ]);
+    ];
+    if ($canManageInventorySettings) {
+        $statement = $database->prepare(
+            'INSERT INTO app_users (username, password_hash, can_manage_users, can_manage_handover, can_manage_inventory_settings)
+             VALUES (?, ?, ?, ?, ?)'
+        );
+        $values[] = 1;
+    } else {
+        $statement = $database->prepare(
+            'INSERT INTO app_users (username, password_hash, can_manage_users, can_manage_handover) VALUES (?, ?, ?, ?)'
+        );
+    }
+    $statement->execute($values);
+}
+
+function canManageInventorySettings(array $user): bool
+{
+    // The caller must supply an authenticated, active account from the database.
+    return (bool) ($user['can_manage_users'] ?? false)
+        || (bool) ($user['can_manage_inventory_settings'] ?? false);
+}
+
+function setInventorySettingsPermission(PDO $database, mixed $actorId, mixed $userId, mixed $allowed): void
+{
+    if (!is_int($actorId) || $actorId <= 0 || !is_int($userId) || $userId <= 0 || !is_bool($allowed)) {
+        throw new InvalidArgumentException('Ungültige Kontodaten oder Berechtigung.');
+    }
+
+    $update = $database->prepare(
+        'UPDATE app_users AS target
+         INNER JOIN app_users AS actor ON actor.id = ? AND actor.active = 1 AND actor.can_manage_users = 1
+         SET target.can_manage_inventory_settings = ?
+         WHERE target.id = ?'
+    );
+    $update->execute([$actorId, $allowed ? 1 : 0, $userId]);
+    if ($update->rowCount() !== 0) {
+        return;
+    }
+
+    $actor = $database->prepare('SELECT 1 FROM app_users WHERE id = ? AND active = 1 AND can_manage_users = 1');
+    $actor->execute([$actorId]);
+    if (!$actor->fetchColumn()) {
+        throw new RuntimeException('Nur aktive Administratoren dürfen diese Berechtigung ändern.');
+    }
+    $target = $database->prepare('SELECT 1 FROM app_users WHERE id = ?');
+    $target->execute([$userId]);
+    if (!$target->fetchColumn()) {
+        throw new InvalidArgumentException('Das Benutzerkonto wurde nicht gefunden.');
+    }
 }
 
 function changeOwnPassword(PDO $database, int $userId, mixed $current, mixed $new, mixed $confirmation): string
