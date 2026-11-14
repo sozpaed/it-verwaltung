@@ -21,3 +21,9 @@ if (number && modes.length) {
     modes.forEach(mode => mode.addEventListener('change', updateNumber));
     updateNumber();
 }
+
+document.querySelectorAll('.delete-setting').forEach(form => {
+    const dialog = form.querySelector('dialog');
+    form.querySelector('.open-delete-dialog').addEventListener('click', () => dialog.showModal());
+    form.querySelector('.close-delete-dialog').addEventListener('click', () => dialog.close());
+});

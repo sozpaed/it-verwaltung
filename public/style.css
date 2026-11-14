@@ -28,6 +28,11 @@ label input[type="radio"] { display: inline-block; width: auto; }
 .button:hover, button:hover { background: #68103e; }
 .icon-button { display: flex; align-items: center; justify-content: center; padding: .5rem; }
 .icon-button svg { width: 1.35rem; height: 1.35rem; fill: currentColor; }
+.setting-actions { display: flex; gap: .5rem; align-items: center; }
+.setting-actions form { margin: 0; padding: 0; }
+dialog { max-width: min(90vw, 26rem); border: 1px solid #d5d9df; border-radius: .4rem; padding: 1.25rem; }
+dialog::backdrop { background: #0008; }
+dialog h3 { margin-top: 0; }
 table { border-collapse: collapse; width: 100%; background: white; display: block; overflow-x: auto; }
 th, td { padding: .6rem; border: 1px solid #d5d9df; text-align: left; }
 .error { background: #ffe4e4; padding: .8rem; }

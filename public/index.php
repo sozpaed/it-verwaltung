@@ -444,10 +444,21 @@ $csrf = h($_SESSION['csrf']);
         }
     }
 ?><td><?= h($typeName) ?></td><?php endif ?>
-<td><a class="button" href="/?stammdaten=<?= h($settingKind) ?>&amp;edit=<?= (int) $setting['id'] ?>">Bearbeiten</a>
-<form method="post"><input type="hidden" name="csrf" value="<?= $csrf ?>"><input type="hidden" name="action" value="delete_inventory_setting">
+<td><div class="setting-actions">
+<a class="button icon-button" href="/?stammdaten=<?= h($settingKind) ?>&amp;edit=<?= (int) $setting['id'] ?>"
+   aria-label="<?= h($setting['name'] . ' bearbeiten') ?>" title="Bearbeiten">
+<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zm17.71-10.04a1 1 0 0 0 0-1.42l-2.5-2.5a1 1 0 0 0-1.42 0l-1.83 1.83 3.75 3.75 2-1.66z"></path></svg></a>
+<form method="post" class="delete-setting"><input type="hidden" name="csrf" value="<?= $csrf ?>"><input type="hidden" name="action" value="delete_inventory_setting">
 <input type="hidden" name="kind" value="<?= h($settingKind) ?>"><input type="hidden" name="setting_id" value="<?= (int) $setting['id'] ?>">
-<label><input type="checkbox" name="confirm_delete" value="1" required> Löschen bestätigen</label><button>Löschen</button></form></td></tr>
+<button type="button" class="icon-button open-delete-dialog" aria-label="<?= h($setting['name'] . ' löschen') ?>" title="Löschen">
+<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 19a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"></path></svg></button>
+<dialog aria-labelledby="delete-title-<?= (int) $setting['id'] ?>">
+<h3 id="delete-title-<?= (int) $setting['id'] ?>">Löschen bestätigen</h3>
+<p><?= h($setting['name']) ?> wirklich löschen?</p>
+<div class="page-actions">
+<button type="submit" name="confirm_delete" value="1">Ja</button>
+<button type="button" class="close-delete-dialog" autofocus>Nein</button>
+</div></dialog></form></div></td></tr>
 <?php endforeach ?></tbody></table>
 <p>Verwendete Einträge können nicht gelöscht werden. Änderungen an Kürzeln ändern bestehende Inventarnummern nicht.</p>
 <?php endif ?>

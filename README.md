@@ -23,8 +23,8 @@ oder den Einsatz mit echten personenbezogenen Daten freigegeben.
   dessen Auswahl wird anhand der Kategorie angezeigt. Die Gruppe dient der
   Zuordnung und beeinflusst die Inventarnummer nicht. Standardtypen und
   -kategorien sind bereits angelegt, Bereiche und Gruppen werden selbst
-  ergänzt. Nicht mehr benötigte Einträge können nur gelöscht werden, wenn sie
-  nicht verwendet werden.
+  ergänzt. Das Löschen erfordert eine Bestätigung und ist nur möglich, wenn
+  der Eintrag nicht verwendet wird.
 - Die Inventarnummer entspricht der eindeutigen Bezeichnung aus der
   Inventarisierung. Beim Anlegen kann sie manuell eingegeben oder automatisch
   aus dem Kürzel des ausgewählten Bereichs bzw. Raums, optionaler Charge,
