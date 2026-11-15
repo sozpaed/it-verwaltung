@@ -2,6 +2,7 @@
 /install.token
 /storage/
 /backup/
+/planung.md
 *.ps1
 *.sql.gz
 *.sql.gpg
